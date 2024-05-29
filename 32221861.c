@@ -120,6 +120,7 @@
  * 31 is ra (return address)
  */
 
+
 int register_num[NUM_REGISTERS][REGISTER_SIZE];
 /////////////////////////////////////////////////////
 
@@ -164,11 +165,14 @@ typedef struct control_signal{
 
 }control_signal;
 
+control_signal signal = {0};   //컨트롤 시그널은 i,i,j포맷에 공통적으로 사용함으로 전역변수로 세팅함
 ///////////////////instruction_fetch part///////////////////////////
 
+char *name;     //파일이름 출력할때 필요한 전역변수
 
 void hex_to_bin(char *hex_code ,char *bin);
 void instruction_decode(char *bin_code);
+void signal_control(int op_flag, char *opcode, char *funct);
 
 int instruction_fetch(char *file_name) {
     FILE *file;
@@ -176,6 +180,11 @@ int instruction_fetch(char *file_name) {
     unsigned char buffer[4];
     size_t bytesRead;
     int i;
+
+    int RCount = 0;
+    int ICount = 0;
+    int JCount = 0;
+    char opcode[7];
 
     char hex[9] = {0};
 
@@ -201,6 +210,9 @@ int instruction_fetch(char *file_name) {
 
     // 파일에서 바이트 읽기
     while(bytesRead = fread(buffer, sizeof(unsigned char), sizeof(buffer), file)){
+
+    count++;
+    printf("%s> Cycle : %d\n",name,count);
         
     if (bytesRead == 0) {
         perror("파일에서 데이터를 읽을 수 없습니다");
@@ -223,16 +235,35 @@ int instruction_fetch(char *file_name) {
     }
     
     printf("(PC=%#08x)\n", count*4);
+    
+    strncpy(opcode,bin,6);
 
     instruction_decode(bin);
 
+    if (strcmp(opcode,R_TYPE_OP) == 0)
+    {
+        RCount++;
+    }
+    else if (strcmp(opcode,J_TYPE_OP) == 0 || strcmp(opcode,J_TYPE_OP_JAL) == 0)
+    {
+        JCount++;
+    }else{
+        ICount++;
+    }
+    
+
     memset(hex,0,sizeof(hex));
     memset(bin,0,sizeof(bin));
+    memset(&signal,0,sizeof(signal));
+    
 
     }
     
     // 파일 닫기
     fclose(file);
+
+    printf("%s > Final Result\n",name);
+    printf("\tCycles: %d, R-type instructions : %d, I-type instructions : %d, J-type instructions : %d\n",count,RCount,ICount,JCount);
 
     return EXIT_SUCCESS;
 }
@@ -276,7 +307,7 @@ void slice(int start, int end, char *dst, char *src) {
 
 void instruction_decode(char *bin_code) {
 
-    int op_flag = 0;
+    int op_flag = 0;            //op_code를 슬라이스해서 판별해주는 변수 1:R-format, 2~3 : J-format, 4: I-format
     char op[6];
     char r1[5];
     char r2[5];
@@ -285,8 +316,6 @@ void instruction_decode(char *bin_code) {
     char op_compare[7];
 
     Field_register R = {0};
-
-    control_signal signal = {-1};
 
     slice(0,5,op_compare,bin_code);
     
@@ -702,12 +731,24 @@ void instruction_decode(char *bin_code) {
     }
     ////////////////////////////////////////////////////////////////////////////////////////////
 
-    ////////////////////////////////////print instructions/////////////////////////////////////    
+    ////////////////////////////////////print instructions/////////////////////////////////////
+    
 
     printf("\topcode: %s, rs: %s (%d), rt: %s (%d), rd: %s (%d), shamt: %s, funct: %s\n",R.op,r1,rs_val,r2,rt_val,r3,rd_val,R.shamt,R.funct);
 
+    /////////////////////////////////////////////////////////////////////////////////////////
+ 
+    signal_control(op_flag,R.op,R.funct);
 
-        /////////////////////////////////set Control Signal Genertaion///////////////////////////////
+    ///////////////////////////////////print Control_signal//////////////////////////////////
+    printf("\tRegDst: %d, RegWrite: %d, ALUSrc: %d, PCSrc: %d, MemRead: %d, MemWrite: %d, MemtoReg: %d, ALUOp: %s\n",signal.RegDst,signal.RegWrite,signal.ALUSrc,signal.PCSrc,signal.MemRead,signal.MemWrite,signal.MemtoReg,signal.ALUOp);
+
+}
+
+// opcode 플래그 비트를 입력받아, op_code마다 시그널 비트를 설정함
+void signal_control(int op_flag,char *opcode, char *funct){
+        
+    /////////////////////////////////set Control Signal Genertaion///////////////////////////////
 
     if (op_flag == 1)
     {
@@ -721,17 +762,17 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         
         /////////////////ALUop파트//////////////////////////
-        if (strcmp(R.funct,ALU_AND)){
+        if (strcmp(funct,ALU_AND)){
             strcpy(signal.ALUOp,ALU_AND);
-        }else if(strcmp(R.funct,ALU_OR)){
+        }else if(strcmp(funct,ALU_OR)){
             strcpy(signal.ALUOp,ALU_OR);
-        }else if(strcmp(R.funct,ALU_ADD)){
+        }else if(strcmp(funct,ALU_ADD)){
             strcpy(signal.ALUOp,ALU_ADD);
-        }else if(strcmp(R.funct,ALU_SUB)){
+        }else if(strcmp(funct,ALU_SUB)){
             strcpy(signal.ALUOp,ALU_SUB);
-        }else if(strcmp(R.funct,ALU_SLT)){
+        }else if(strcmp(funct,ALU_SLT)){
             strcpy(signal.ALUOp,ALU_SLT);
-        }else if(strcmp(R.funct,ALU_NOR)){
+        }else if(strcmp(funct,ALU_NOR)){
             strcpy(signal.ALUOp,ALU_NOR);
         }
         ////////////////////////////////////////////////////////////
@@ -750,9 +791,9 @@ void instruction_decode(char *bin_code) {
                 
     }else if (op_flag == 4)
 {
-    if (strcmp(R.op, I_TYPE_OP_LW) == 0 || strcmp(R.op, I_TYPE_OP_LB) == 0 || strcmp(R.op, I_TYPE_OP_LH) == 0 ||
-        strcmp(R.op, I_TYPE_OP_LWL) == 0 || strcmp(R.op, I_TYPE_OP_LBU) == 0 || strcmp(R.op, I_TYPE_OP_LHU) == 0 ||
-        strcmp(R.op, I_TYPE_OP_LWR) == 0 || strcmp(R.op, I_TYPE_OP_LWC1) == 0 || strcmp(R.op, I_TYPE_OP_LWC2) == 0)
+    if (strcmp(opcode, I_TYPE_OP_LW) == 0 || strcmp(opcode, I_TYPE_OP_LB) == 0 || strcmp(opcode, I_TYPE_OP_LH) == 0 ||
+        strcmp(opcode, I_TYPE_OP_LWL) == 0 || strcmp(opcode, I_TYPE_OP_LBU) == 0 || strcmp(opcode, I_TYPE_OP_LHU) == 0 ||
+        strcmp(opcode, I_TYPE_OP_LWR) == 0 || strcmp(opcode, I_TYPE_OP_LWC1) == 0 || strcmp(opcode, I_TYPE_OP_LWC2) == 0)
     {
         signal.RegDst = 0;
         signal.ALUSrc = 1;
@@ -764,9 +805,9 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_ADD);
     }
-    else if (strcmp(R.op, I_TYPE_OP_SW) == 0 || strcmp(R.op, I_TYPE_OP_SB) == 0 || strcmp(R.op, I_TYPE_OP_SH) == 0 ||
-             strcmp(R.op, I_TYPE_OP_SWL) == 0 || strcmp(R.op, I_TYPE_OP_SWR) == 0 || strcmp(R.op, I_TYPE_OP_SWC1) == 0 ||
-             strcmp(R.op, I_TYPE_OP_SWC2) == 0)
+    else if (strcmp(opcode, I_TYPE_OP_SW) == 0 || strcmp(opcode, I_TYPE_OP_SB) == 0 || strcmp(opcode, I_TYPE_OP_SH) == 0 ||
+             strcmp(opcode, I_TYPE_OP_SWL) == 0 || strcmp(opcode, I_TYPE_OP_SWR) == 0 || strcmp(opcode, I_TYPE_OP_SWC1) == 0 ||
+             strcmp(opcode, I_TYPE_OP_SWC2) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 1;
@@ -778,7 +819,7 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_ADD);
     }
-    else if (strcmp(R.op, I_TYPE_OP_BEQ) == 0 || strcmp(R.op, I_TYPE_OP_BNE) == 0)
+    else if (strcmp(opcode, I_TYPE_OP_BEQ) == 0 || strcmp(opcode, I_TYPE_OP_BNE) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 0;
@@ -789,7 +830,7 @@ void instruction_decode(char *bin_code) {
         signal.MemWrite = 0;
         signal.Branch = 1;
         strcpy(signal.ALUOp, ALU_SUB);
-    }else if (strcmp(R.op, I_TYPE_OP_SLTI) == 0 || strcmp(R.op, I_TYPE_OP_SLTIU) == 0)
+    }else if (strcmp(opcode, I_TYPE_OP_SLTI) == 0 || strcmp(opcode, I_TYPE_OP_SLTIU) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 1;
@@ -801,7 +842,7 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_SLT);
     }
-    else if (strcmp(R.op, I_TYPE_OP_ADDI) == 0 || strcmp(R.op, I_TYPE_OP_ADDIU) == 0)
+    else if (strcmp(opcode, I_TYPE_OP_ADDI) == 0 || strcmp(opcode, I_TYPE_OP_ADDIU) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 1;
@@ -812,19 +853,14 @@ void instruction_decode(char *bin_code) {
         signal.MemWrite = 0;
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_ADD);
+       }
     }
 }
 
-    //////////////////////////////////////////////////////////////////////////////////////////    
-
-
-    ///////////////////////////////////print Control_signal//////////////////////////////////
-    printf("\tRegDst: %d, RegWrite: %d, ALUSrc: %d, PCSrc: %d, MemRead: %d, MemWrite: %d, MemtoReg: %d, ALUOp: %s\n",signal.RegDst,signal.RegWrite,signal.ALUSrc,signal.PCSrc,signal.MemRead,signal.MemWrite,signal.MemtoReg,signal.ALUOp);
-
-}
-
 int main(int argc, char *args[]){
-    int execute = instruction_fetch("sum.bin");
+
+    name = args[0]+2;
+    int execute = instruction_fetch(args[1]);
 
     return 0;
 }

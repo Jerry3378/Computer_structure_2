@@ -48,7 +48,13 @@ typedef struct control_signal{
     int Branch;     //분기 명령어 활성화 신호
     char ALUOp[5];  //ALU가 수행할 연산을 결정(ex: ADD,SUB,AND,OR등)
 
-}control_signal;
+}control_signal; 
+
+control_signal signal={0};      //시그널 구조체를 전역변수로 선언(r,i,j포맷에 공통적으로 사용되기 때문)
+////////////////////////////////////////////////////////////////////
+
+
+void signal_control(int op_flag,char *opcode, char *funct);
 
 void slice(int start, int end, char *dst, char *src) {
     for (int i = start; i <= end; i++) {
@@ -58,8 +64,6 @@ void slice(int start, int end, char *dst, char *src) {
 }
 
 void instruction_decode(char *bin_code) {
-
-    control_signal signal;
 
     int op_flag = 0;            //op_code를 슬라이스해서 판별해주는 변수 1:R-format, 2~3 : J-format, 4: I-format
     char op[6];
@@ -491,8 +495,17 @@ void instruction_decode(char *bin_code) {
     printf("\topcode: %s, rs: %s (%d), rt: %s (%d), rd: %s (%d), shamt: %s, funct: %s\n",R.op,r1,rs_val,r2,rt_val,r3,rd_val,R.shamt,R.funct);
 
     /////////////////////////////////////////////////////////////////////////////////////////
+ 
+    signal_control(op_flag,R.op,R.funct);
 
+    ///////////////////////////////////print Control_signal//////////////////////////////////
+    printf("\tRegDst: %d, RegWrite: %d, ALUSrc: %d, PCSrc: %d, MemRead: %d, MemWrite: %d, MemtoReg: %d, ALUOp: %s\n",signal.RegDst,signal.RegWrite,signal.ALUSrc,signal.PCSrc,signal.MemRead,signal.MemWrite,signal.MemtoReg,signal.ALUOp);
 
+}
+
+// opcode 플래그 비트를 입력받아, op_code마다 시그널 비트를 설정함
+void signal_control(int op_flag,char *opcode, char *funct){
+        
     /////////////////////////////////set Control Signal Genertaion///////////////////////////////
 
     if (op_flag == 1)
@@ -507,17 +520,17 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         
         /////////////////ALUop파트//////////////////////////
-        if (strcmp(R.funct,ALU_AND)){
+        if (strcmp(funct,ALU_AND)){
             strcpy(signal.ALUOp,ALU_AND);
-        }else if(strcmp(R.funct,ALU_OR)){
+        }else if(strcmp(funct,ALU_OR)){
             strcpy(signal.ALUOp,ALU_OR);
-        }else if(strcmp(R.funct,ALU_ADD)){
+        }else if(strcmp(funct,ALU_ADD)){
             strcpy(signal.ALUOp,ALU_ADD);
-        }else if(strcmp(R.funct,ALU_SUB)){
+        }else if(strcmp(funct,ALU_SUB)){
             strcpy(signal.ALUOp,ALU_SUB);
-        }else if(strcmp(R.funct,ALU_SLT)){
+        }else if(strcmp(funct,ALU_SLT)){
             strcpy(signal.ALUOp,ALU_SLT);
-        }else if(strcmp(R.funct,ALU_NOR)){
+        }else if(strcmp(funct,ALU_NOR)){
             strcpy(signal.ALUOp,ALU_NOR);
         }
         ////////////////////////////////////////////////////////////
@@ -536,9 +549,9 @@ void instruction_decode(char *bin_code) {
                 
     }else if (op_flag == 4)
 {
-    if (strcmp(R.op, I_TYPE_OP_LW) == 0 || strcmp(R.op, I_TYPE_OP_LB) == 0 || strcmp(R.op, I_TYPE_OP_LH) == 0 ||
-        strcmp(R.op, I_TYPE_OP_LWL) == 0 || strcmp(R.op, I_TYPE_OP_LBU) == 0 || strcmp(R.op, I_TYPE_OP_LHU) == 0 ||
-        strcmp(R.op, I_TYPE_OP_LWR) == 0 || strcmp(R.op, I_TYPE_OP_LWC1) == 0 || strcmp(R.op, I_TYPE_OP_LWC2) == 0)
+    if (strcmp(opcode, I_TYPE_OP_LW) == 0 || strcmp(opcode, I_TYPE_OP_LB) == 0 || strcmp(opcode, I_TYPE_OP_LH) == 0 ||
+        strcmp(opcode, I_TYPE_OP_LWL) == 0 || strcmp(opcode, I_TYPE_OP_LBU) == 0 || strcmp(opcode, I_TYPE_OP_LHU) == 0 ||
+        strcmp(opcode, I_TYPE_OP_LWR) == 0 || strcmp(opcode, I_TYPE_OP_LWC1) == 0 || strcmp(opcode, I_TYPE_OP_LWC2) == 0)
     {
         signal.RegDst = 0;
         signal.ALUSrc = 1;
@@ -550,9 +563,9 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_ADD);
     }
-    else if (strcmp(R.op, I_TYPE_OP_SW) == 0 || strcmp(R.op, I_TYPE_OP_SB) == 0 || strcmp(R.op, I_TYPE_OP_SH) == 0 ||
-             strcmp(R.op, I_TYPE_OP_SWL) == 0 || strcmp(R.op, I_TYPE_OP_SWR) == 0 || strcmp(R.op, I_TYPE_OP_SWC1) == 0 ||
-             strcmp(R.op, I_TYPE_OP_SWC2) == 0)
+    else if (strcmp(opcode, I_TYPE_OP_SW) == 0 || strcmp(opcode, I_TYPE_OP_SB) == 0 || strcmp(opcode, I_TYPE_OP_SH) == 0 ||
+             strcmp(opcode, I_TYPE_OP_SWL) == 0 || strcmp(opcode, I_TYPE_OP_SWR) == 0 || strcmp(opcode, I_TYPE_OP_SWC1) == 0 ||
+             strcmp(opcode, I_TYPE_OP_SWC2) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 1;
@@ -564,7 +577,7 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_ADD);
     }
-    else if (strcmp(R.op, I_TYPE_OP_BEQ) == 0 || strcmp(R.op, I_TYPE_OP_BNE) == 0)
+    else if (strcmp(opcode, I_TYPE_OP_BEQ) == 0 || strcmp(opcode, I_TYPE_OP_BNE) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 0;
@@ -575,7 +588,7 @@ void instruction_decode(char *bin_code) {
         signal.MemWrite = 0;
         signal.Branch = 1;
         strcpy(signal.ALUOp, ALU_SUB);
-    }else if (strcmp(R.op, I_TYPE_OP_SLTI) == 0 || strcmp(R.op, I_TYPE_OP_SLTIU) == 0)
+    }else if (strcmp(opcode, I_TYPE_OP_SLTI) == 0 || strcmp(opcode, I_TYPE_OP_SLTIU) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 1;
@@ -587,7 +600,7 @@ void instruction_decode(char *bin_code) {
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_SLT);
     }
-    else if (strcmp(R.op, I_TYPE_OP_ADDI) == 0 || strcmp(R.op, I_TYPE_OP_ADDIU) == 0)
+    else if (strcmp(opcode, I_TYPE_OP_ADDI) == 0 || strcmp(opcode, I_TYPE_OP_ADDIU) == 0)
     {
         signal.RegDst = -1;
         signal.ALUSrc = 1;
@@ -598,22 +611,12 @@ void instruction_decode(char *bin_code) {
         signal.MemWrite = 0;
         signal.Branch = 0;
         strcpy(signal.ALUOp, ALU_ADD);
+       }
     }
 }
 
-    //////////////////////////////////////////////////////////////////////////////////////////    
 
-
-    ///////////////////////////////////print Control_signal//////////////////////////////////
-    printf("\tRegDst: %d, RegWrite: %d, ALUSrc: %d, PCSrc: %d, MemRead: %d, MemWrite: %d, MemtoReg: %d, ALUOp: %s\n",signal.RegDst,signal.RegWrite,signal.ALUSrc,signal.PCSrc,signal.MemRead,signal.MemWrite,signal.MemtoReg,signal.ALUOp);
-
-}
-
-
-
-
-/*
 int main() {
     instruction_decode("10101111101111100000000000001100");  // 예시 바이너리 코드
     return 0;
-}*/
+}
